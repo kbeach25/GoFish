@@ -1,0 +1,185 @@
+import streamlit as st
+import requests
+import random
+from PIL import Image
+from io import BytesIO
+
+def getDeck(players):
+    # 2 players only use one deck
+    if players == 2:
+        # Get deck from deckofcardsapi
+        url = "https://deckofcardsapi.com/api/deck/new/shuffle/?deck_count=1"
+        response = requests.get(url).json()
+        id = response['deck_id']
+
+        # put shuffled cards into deck as a stack
+        draw_url = f"https://deckofcardsapi.com/api/deck/{id}/draw/?count=52"
+        draw_response = requests.get(draw_url).json()
+        cards = draw_response['cards']
+
+        deck_stack = cards[::-1] # Reverse order so first card drawn is on the bottom
+
+    # 3+ players use two decks
+    else:
+        # Get deck from deckofcardsapi
+        url = "https://deckofcardsapi.com/api/deck/new/shuffle/?deck_count=2"
+        response = requests.get(url).json()
+        id = response['deck_id']
+
+        # put shuffled cards into deck as a stack
+        draw_url = f"https://deckofcardsapi.com/api/deck/{id}/draw/?count=104"
+        draw_response = requests.get(draw_url).json()
+        cards = draw_response['cards']
+
+        deck_stack = cards[::-1] # Reverse order so first card drawn is on the bottom
+        
+    return deck_stack
+
+# Only need the first card
+def deal(deck):
+    return deck.pop()
+
+# Get value of each card for sorting and comparison
+def cardValue(card):
+    order = {'2':2, '3':3, '4':4, '5':5, '6':6, '7':7,
+             '8':8, '9':9, '10':10, 'JACK':11, 'QUEEN':12, 'KING':13, 'ACE':14}
+    return order[card['value']]
+    
+    
+
+# start streamlit app
+if "validated" not in st.session_state:
+    st.session_state.validated = False
+if "code" not in st.session_state:
+    st.session_state.code = ""
+if "started" not in st.session_state:
+    st.session_state.started = False
+
+# This is what shows up before you started the game 
+if not st.session_state.started:
+    # Markdown used for more text customization
+    st.markdown("<h1 style='text-align: center;'>Palace Card Game</h1>", unsafe_allow_html=True)
+    st.markdown(
+    "<h3 style='text-align: center;'>Credit for card images: <a href='https://deckofcardsapi.com' target='_blank'>deckofcardsapi.com</a></h3>",
+    unsafe_allow_html=True
+)
+    st.markdown('''
+    Rules: Different than you'll see online, but these are the rules I was taught
+    and have always played by.
+
+    2 players use one deck, 3-5 players use two. 
+
+    Dealer deals a card from shuffed deck to each player until each player has three.
+    cards are to remain face down and cannot be seen until all of their other cards
+    are gone. These make up a player's "back row".
+
+    Then, dealer deals a card from shuffled deck to each player until they have six.
+    Players choose three cards to start with and three cards to keep face down, their
+    "second hand".
+
+    Whichever player has the lowest card goes first. If it's a tie, a coin flip or
+    dice roll is used to determine who goes first. Rotation is other wise clockwise.
+
+    RULES ARE INCOMPLETE
+    '''
+                )
+
+
+    col1, col2, col3 = st.columns([1, 1, 1])
+
+    with col2:
+        # Initialize st.session values for difficulty and number of players
+        if "difficulty" not in st.session_state:
+            st.session_state.difficulty = "Easy"
+
+        if "num_players" not in st.session_state:
+            st.session_state.num_players = 2
+
+        # Dropdowns to choose players and difficulty
+        st.session_state.difficulty = st.selectbox("Select Difficulty:", options=["Easy", "Medium", "Hard"], index=["Easy", "Medium", "Hard"].index(st.session_state.difficulty))
+        st.session_state.num_players = st.selectbox("Number of Players:", options=[2, 3, 4, 5], index=[2, 3, 4, 5].index(st.session_state.num_players))
+
+        # Run game with go button
+        if st.button("Go"):
+            st.session_state.started = True
+            st.rerun()
+
+# This is what shows up once the game has started
+if st.session_state.started:
+    players = st.session_state.num_players
+    dif = st.session_state.difficulty
+    deck = getDeck(players)
+
+    # keep list of cards in player's hands, second hands, and back rows
+    # To access number: player[hand, second hand, back row]
+    # Example: p1[0], p1[1], or p1[2]
+    p1 = [[], [], []]
+    p2 = [[], [], []]
+    p3 = [[], [], []]
+    p4 = [[], [], []]
+    p5 = [[], [], []]
+
+    # Edit hand list depending on number of players
+    px = [p1, p2, p3, p4, p5]
+    px = px[0:players]
+
+    # Assign random player to begin dealing
+    starting_idx = random.randint(0, players-1)
+    st.markdown(f"First player to get dealt a card: P{starting_idx + 1}") 
+
+    # Back row dealing
+    back_row_cards = players * 3
+
+    # Copy this format for each player
+    deck_view = st.empty()
+    
+    for each in range(back_row_cards):
+        idx = each % players # loop through players
+        card = deal(deck)
+        px[idx][2].append(card)
+        deck_view.markdown(f'Deck: {len(deck)}')
+
+
+    # Second hand dealing
+    second_hand_cards = players * 6
+    for each in range(second_hand_cards):
+        idx = each % players # loop through players
+        card = deal(deck)
+        px[idx][1].append(card)
+        deck_view.markdown(f'Deck: {len(deck)}')
+
+
+    # P1 must see hand to choose cards
+    p1_second_hand_6 = sorted(p1[1], key=cardValue)
+
+    ##### THIS MAY CHANGE IF IT BECOMES NECESSARY
+    st.markdown("<h3>Choose 3 cards to keep and 3 to set aside<h3/>", unsafe_allow_html=True)
+    scroll_style = """
+    <style>
+    .scrollable-container {
+        max-height: 200px;
+        overflow-y: auto;
+        border: 1px solid #ddd;
+        padding: 10px;
+        background-color: #f9f9f9;
+    }
+    </style>
+"""
+    st.markdown(scroll_style, unsafe_allow_html=True)
+    sec_hand_6_container = st.container()
+
+    with sec_hand_6_container:
+        st.markdown('<div class="scrollable-container">', unsafe_allow_html=True)
+
+        # Display cards in rows of 3
+        for i in range(0, len(p1_second_hand_6), 3):
+            cols = st.columns(3)
+            for j, card in enumerate(p1_second_hand_6[i:i+3]):
+                cols[j].image(card['image'], width=200)
+
+        st.markdown('</div>', unsafe_allow_html=True)
+
+        # Player card selection
+
+    # CPU_second_hand_select()
+    
