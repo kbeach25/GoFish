@@ -44,6 +44,61 @@ def cardValue(card):
     order = {'2':2, '3':3, '4':4, '5':5, '6':6, '7':7,
              '8':8, '9':9, '10':10, 'JACK':11, 'QUEEN':12, 'KING':13, 'ACE':14}
     return order[card['value']]
+
+# Players choose three cards to start with, the other three are kept in the second hand
+def playerSecondHand(second_hand_cards):
+    st.markdown("<h3>Choose 3 cards for starting hand, other 3 will be kept in second hand<h3/>", unsafe_allow_html=True)
+    scroll_style = """
+    <style>
+    .scrollable-container {
+        max-height: 200px;
+        overflow-y: auto;
+        border: 1px solid #ddd;
+        padding: 10px;
+        background-color: #f9f9f9;
+    }
+    </style>
+"""
+    st.markdown(scroll_style, unsafe_allow_html=True)
+    sec_hand_6_container = st.container()
+
+    with sec_hand_6_container:
+        st.markdown('<div class="scrollable-container">', unsafe_allow_html=True)
+
+        # Display cards in rows of 3, make them clickable
+        for i in range(0, len(second_hand_cards), 3):
+            cols = st.columns(3)
+            
+            for j, card in enumerate(second_hand_cards[i:i+3]):
+                card_idx = i + j
+                img_col = cols[j]
+                img_col.image(card['image'], width=200)
+
+                selected = card_idx in st.session_state.selections
+                btn_label = f"{'Deselect' if selected else 'Select'} {card['value']} of {card['suit']}"
+    
+                if img_col.button(btn_label, key=f"card_btn_{card_idx}"):
+                    if selected:
+                        st.session_state.selections.remove(card_idx)
+                    else:
+                        if len(st.session_state.selections) >= 3:
+                            st.session_state.selections.pop(0)
+                        st.session_state.selections.append(card_idx)
+                    st.rerun()
+
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    if st.button("Confirm Starting Hand"):
+        if len(st.session_state.selections) != 3:
+            st.warning("You must choose 3 cards")
+        else:
+            sel_idx = list(st.session_state.selections)
+            st.session_state.current_hand = [second_hand_cards[i] for i in sel_idx]
+            st.session_state.second_hand = [card for idx, card in enumerate(second_hand_cards) if idx not in sel_idx]
+            st.session_state.first_hand = True
+            st.rerun()
+
+            
     
     
 
@@ -54,6 +109,15 @@ if "code" not in st.session_state:
     st.session_state.code = ""
 if "started" not in st.session_state:
     st.session_state.started = False
+if "first_hand" not in st.session_state:
+    st.session_state.first_hand = False
+if "selections" not in st.session_state:
+    st.session_state.selections = []
+if "current_hand" not in st.session_state:
+    st.session_state.current_hand = []
+if "second_hand" not in st.session_state:
+    st.session_state.second_hand = []
+        
 
 # This is what shows up before you started the game 
 if not st.session_state.started:
@@ -152,34 +216,17 @@ if st.session_state.started:
     # P1 must see hand to choose cards
     p1_second_hand_6 = sorted(p1[1], key=cardValue)
 
-    ##### THIS MAY CHANGE IF IT BECOMES NECESSARY
-    st.markdown("<h3>Choose 3 cards to keep and 3 to set aside<h3/>", unsafe_allow_html=True)
-    scroll_style = """
-    <style>
-    .scrollable-container {
-        max-height: 200px;
-        overflow-y: auto;
-        border: 1px solid #ddd;
-        padding: 10px;
-        background-color: #f9f9f9;
-    }
-    </style>
-"""
-    st.markdown(scroll_style, unsafe_allow_html=True)
-    sec_hand_6_container = st.container()
+    # Second hand selection for player
+    if not st.session_state.first_hand:
+        if "p1_sec_hand_cache" not in st.session_state:
+            st.session_state.p1_sec_hand_cache = sorted(p1[1], key=cardValue)
+        playerSecondHand(st.session_state.p1_sec_hand_cache)
+    else:
+        st.markdown("### Starting Hand:")
+        current_hand = st.session_state.current_hand
 
-    with sec_hand_6_container:
-        st.markdown('<div class="scrollable-container">', unsafe_allow_html=True)
-
-        # Display cards in rows of 3
-        for i in range(0, len(p1_second_hand_6), 3):
-            cols = st.columns(3)
-            for j, card in enumerate(p1_second_hand_6[i:i+3]):
-                cols[j].image(card['image'], width=200)
-
-        st.markdown('</div>', unsafe_allow_html=True)
-
-        # Player card selection
-
-    # CPU_second_hand_select()
+        cols = st.columns(3)
+        for i, card in enumerate(current_hand):
+            with cols[i]:
+                st.image(card['image'], width=200)
     
