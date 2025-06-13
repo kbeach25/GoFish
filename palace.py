@@ -3,6 +3,7 @@ import requests
 import random
 from PIL import Image
 from io import BytesIO
+import ai_easy
 
 def getDeck(players):
     # 2 players only use one deck
@@ -36,8 +37,13 @@ def getDeck(players):
     return deck_stack
 
 # Only need the first card
-def deal(deck):
-    return deck.pop()
+def deal():
+    if len(st.session_state.deck) == 0:
+        # Subject to change
+        st.warning("Deck is empy")
+        return None
+    
+    return st.session_state.deck.pop()
 
 # Get value of each card for sorting and comparison
 def cardValue(card):
@@ -117,6 +123,10 @@ if "current_hand" not in st.session_state:
     st.session_state.current_hand = []
 if "second_hand" not in st.session_state:
     st.session_state.second_hand = []
+if "difficulty" not in st.session_state:
+    st.session_state.difficulty = "Easy"
+if "num_players" not in st.session_state:
+    st.session_state.num_players = 2
         
 
 # This is what shows up before you started the game 
@@ -152,13 +162,6 @@ if not st.session_state.started:
     col1, col2, col3 = st.columns([1, 1, 1])
 
     with col2:
-        # Initialize st.session values for difficulty and number of players
-        if "difficulty" not in st.session_state:
-            st.session_state.difficulty = "Easy"
-
-        if "num_players" not in st.session_state:
-            st.session_state.num_players = 2
-
         # Dropdowns to choose players and difficulty
         st.session_state.difficulty = st.selectbox("Select Difficulty:", options=["Easy", "Medium", "Hard"], index=["Easy", "Medium", "Hard"].index(st.session_state.difficulty))
         st.session_state.num_players = st.selectbox("Number of Players:", options=[2, 3, 4, 5], index=[2, 3, 4, 5].index(st.session_state.num_players))
@@ -166,62 +169,73 @@ if not st.session_state.started:
         # Run game with go button
         if st.button("Go"):
             st.session_state.started = True
+            st.session_state.first_hand = False
+            st.session_state.selections = []
+            st.session_state.current_hand = []
+            st.session_state.second_hand = []
+            st.session_state.deck = getDeck(st.session_state.num_players)
+            st.session_state.px = [[[], [], []] for _ in range(st.session_state.num_players)]
+            st.session_state.dealt = False
             st.rerun()
 
 # This is what shows up once the game has started
 if st.session_state.started:
     players = st.session_state.num_players
     dif = st.session_state.difficulty
-    deck = getDeck(players)
 
-    # keep list of cards in player's hands, second hands, and back rows
-    # To access number: player[hand, second hand, back row]
-    # Example: p1[0], p1[1], or p1[2]
-    p1 = [[], [], []]
-    p2 = [[], [], []]
-    p3 = [[], [], []]
-    p4 = [[], [], []]
-    p5 = [[], [], []]
+    # Need deck and hand initialization
+    if 'deck' not in st.session_state:
+        st.session_state.deck = getDeck(players)
+    if 'px' not in st.session_state:
+        st.session_state.px = [[[], [], []] for _ in range(players)]
+    if 'dealt' not in st.session_state:
+        st.session_state.dealt = False
 
-    # Edit hand list depending on number of players
-    px = [p1, p2, p3, p4, p5]
-    px = px[0:players]
-
-    # Assign random player to begin dealing
-    starting_idx = random.randint(0, players-1)
-    st.markdown(f"First player to get dealt a card: P{starting_idx + 1}") 
-
-    # Back row dealing
-    back_row_cards = players * 3
-
-    # Copy this format for each player
     deck_view = st.empty()
+    with deck_view.container():
+        deck_col = st.columns([1, 2, 1])
+        with deck_col[1]:
+            deck_count = st.empty()
+            st.image("card_back.png", width=200)
+            deck_count.markdown(f'### Deck Cards: {len(st.session_state.deck)}')
+
+    if not st.session_state.dealt:
+        # Assign random player to begin dealing
+        starting_idx = random.randint(0, players-1)
+        st.markdown(f"First player to get dealt a card: P{starting_idx + 1}") 
+
+        # Back row dealing
+        back_row_cards = players * 3
     
-    for each in range(back_row_cards):
-        idx = each % players # loop through players
-        card = deal(deck)
-        px[idx][2].append(card)
-        deck_view.markdown(f'Deck: {len(deck)}')
+        for each in range(back_row_cards):
+            idx = each % players # loop through players
+            card = deal()
+            st.session_state.px[idx][2].append(card)
+            deck_view.markdown(f'### Deck: {len(st.session_state.deck)}')
 
 
-    # Second hand dealing
-    second_hand_cards = players * 6
-    for each in range(second_hand_cards):
-        idx = each % players # loop through players
-        card = deal(deck)
-        px[idx][1].append(card)
-        deck_view.markdown(f'Deck: {len(deck)}')
+        # Second hand dealing
+        second_hand_cards = players * 6
+        for each in range(second_hand_cards):
+            idx = each % players # loop through players
+            card = deal()
+            st.session_state.px[idx][1].append(card)
+            deck_view.markdown(f'### Deck Cards: {len(st.session_state.deck)}')
+
+        # End dealing process to avoid re-dealing with every rerun
+        st.session_state.dealt = True
 
 
-    # P1 must see hand to choose cards
-    p1_second_hand_6 = sorted(p1[1], key=cardValue)
+    # P1 must see hand to choose cards, px[0] is human player
+    p1_second_hand_6 = sorted(st.session_state.px[0][1], key=cardValue)
 
     # Second hand selection for player
     if not st.session_state.first_hand:
         if "p1_sec_hand_cache" not in st.session_state:
-            st.session_state.p1_sec_hand_cache = sorted(p1[1], key=cardValue)
+            st.session_state.p1_sec_hand_cache = p1_second_hand_6
         playerSecondHand(st.session_state.p1_sec_hand_cache)
     else:
+        # Starting hand is present and face up
         st.markdown("### Starting Hand:")
         current_hand = st.session_state.current_hand
 
@@ -229,4 +243,45 @@ if st.session_state.started:
         for i, card in enumerate(current_hand):
             with cols[i]:
                 st.image(card['image'], width=200)
-    
+
+        # Second hand is present and face down
+        sec_hand = st.session_state.second_hand
+        st.markdown(f'### Second Hand: {len(sec_hand)}')
+
+        cols = st.columns(3)
+        for i, card in enumerate(sec_hand):
+            with cols[i]:
+                st.image("card_back.png", width=200)
+
+        # Back row is present and face down
+        st.markdown("### Back Row: 3")
+
+        cols = st.columns(3)
+        for i in range(3):
+            with cols[i]:
+                st.image("card_back.png", width=200)
+
+        # CPU second hand selector
+        for idx, player in enumerate(st.session_state.px):
+            if idx == 0:
+                # Human player, skip AI logic
+                continue
+            else:
+                ### THIS IS TEMPORARY
+                cpu_hand = player[1]  # second hand of 6 cards
+                
+                for card in cpu_hand:
+                    print(f'{card["value"]} of {card["suit"]}')
+
+                ####################
+                ai_easy.second_hand_easy(player)
+
+                ### MORE TEMPORARY
+                print("\nStarting Hand:")
+                for card in player[0]:
+                   print(f'{card["value"]} of {card["suit"]}')
+
+                print("\nSecond Hand")
+                for card in player[1]:
+                   print(f'{card["value"]} of {card["suit"]}')
+                print("\n")
