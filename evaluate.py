@@ -1,0 +1,55 @@
+# ChatGPT script
+from stable_baselines3 import PPO
+from gymnasium.wrappers import FlattenObservation
+from GoFishEnv import GoFishEnv
+import numpy as np
+
+# === Config ===
+NUM_GAMES = 1000
+SHOW_GAME_SUMMARY = True  # Set to False to disable per-game logs
+
+# === Load model ===
+model = PPO.load("GoFish_Model")
+
+# === Stats tracking ===
+wins = 0
+losses = 0
+ties = 0
+zero_games = 0
+
+for game in range(NUM_GAMES):
+    env = FlattenObservation(GoFishEnv())
+    obs, _ = env.reset()
+    done = False
+
+    while not done:
+        action, _ = model.predict(obs)
+        obs, reward, done, _, _ = env.step(action)
+
+    agent_sets = sum(env.unwrapped.agent_sets)
+    opponent_sets = sum(env.unwrapped.opponent_sets)
+
+    if agent_sets == 0 and opponent_sets == 0:
+        zero_games += 1
+        result = "NO PROGRESS"
+    elif agent_sets > opponent_sets:
+        wins += 1
+        result = "WIN"
+    elif agent_sets < opponent_sets:
+        losses += 1
+        result = "LOSS"
+    else:
+        ties += 1
+        result = "TIE"
+
+    if SHOW_GAME_SUMMARY:
+        print(f"Game {game+1}: {result} (Agent: {agent_sets}, Opponent: {opponent_sets})")
+
+# === Final Report ===
+print("\n=== Evaluation Summary ===")
+print(f"Total Games:         {NUM_GAMES}")
+print(f"Wins:                {wins}")
+print(f"Losses:              {losses}")
+print(f"Ties:                {ties}")
+print(f"No Progress Games:   {zero_games}")
+print(f"Win Rate:            {wins / NUM_GAMES:.2%}")
