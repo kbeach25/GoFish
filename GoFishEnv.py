@@ -4,9 +4,15 @@ import numpy as np
 import random
 
 class GoFishEnv(gym.Env):
-    def __init__(self):
+    def __init__(self, mode="train"):
         # Initialize environment
         super().__init__()
+
+        # Initialize human player
+        self.mode = mode
+
+        # Change 'who' the model is in the gameplay depending on mode
+        self.model_role = "agent" if mode == "train" else "opponent"
 
         # Define action and observation spaces
         self.action_space = spaces.Discrete(13) # 13 possible ranks
@@ -71,8 +77,60 @@ class GoFishEnv(gym.Env):
         obs = self._get_observation()
         return obs, {}
 
+    # Step function, function differs depending on mode
+    def step(self, action):
+        if self.mode == "train":
+            return self.training_step(action)
+        elif self.mode == "play":
+            return self.step_play(action)
+        else:
+            print("This should be unreachable, line 87 of GoFishEnv")
 
-    def step(self, action): # Must return observation, reward, terminated, truncated, info
+    def step_play(self, action):
+        # Human turn
+        if self.agent_turn:
+            if not self._can_ask(action):
+                self.agent_turn = False
+                return self._get_observation(), -0.1, False, False, {"reason": "invalid_action"}
+
+            success = self._process_ask(action, player="agent")
+            self._update_sets()
+            reward = 0.01
+            if success:
+                reward += 0.3 * self.opponent_hand.count(action)
+                if self.agent_hand.count(action) == 1:
+                    reward -= 0.5
+
+            else:
+                # Go fish if unsuccessful ask
+                if self.deck:
+                    self.agent_hand.append(self.deck.pop())
+                    reward -= 0.05
+                self.agent_turn = False
+
+            done = self._check_game_over()
+            return self._get_observation(), reward, done, False, {}
+
+        # Agent acting as opponent for play mode
+        else:
+            success = self._process_ask(action, player="opponent")
+            self._update_sets()
+
+            if success:
+                done = self._check_game_over()
+                return self._get_observation(), 0, done, False, {}
+            else:
+                if self.deck:
+                    self.opponent_hand.append(self.deck.pop())
+
+                self.agent_turn = True
+                done = self._check_game_over()
+                return self._get_observation(), 0, done, False, {}
+        
+
+
+    # Function for training model, not for play
+    def training_step(self, action): # Must return observation, reward, terminated, truncated, info
         # Action is just asking do you have rank 2, 3, etc
         # Make sure agent doesn't act out of turn, go to opponent turn if they do
         if not self.agent_turn or not self._can_ask(action):
@@ -80,7 +138,8 @@ class GoFishEnv(gym.Env):
             reason = "moved_out_of_turn" if not self.agent_turn else "invalid_action"
             
             self.agent_turn = False
-            
+
+            # Opponent turn, asks for whatever card it has the most of 
             while self.opponent_hand and not self._check_game_over():
                 # opponent_rank = random.choice(list(set(self.opponent_hand)))
                 counts = [self.opponent_hand.count(r) for r in range(13)]
@@ -139,7 +198,7 @@ class GoFishEnv(gym.Env):
             reward -= 0.05
         self.agent_turn=False
 
-        # Opponent turn
+        # Opponent turn, asks for whatever card it has the most of 
         while self.opponent_hand and not self._check_game_over():
             # opponent_rank = random.choice(list(set(self.opponent_hand)))
             counts = [self.opponent_hand.count(r) for r in range(13)]
@@ -230,4 +289,7 @@ class GoFishEnv(gym.Env):
     def _check_game_over(self): # True if all sets have been completed
         sets = sum(self.agent_sets) + sum(self.opponent_sets)
         return sets == 13
-        
+
+    # Model assignment
+    def set_model(self, model):
+        self.model = model
