@@ -10,7 +10,7 @@ env = FlattenObservation(env)
 
 model = PPO("MlpPolicy", env, verbose=1)
 
-model.learn(total_timesteps=400_000)
+model.learn(total_timesteps=1_300_000)
 
 model.save("GoFish_Model")
 

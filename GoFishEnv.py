@@ -1,5 +1,6 @@
-import gymnasium as gym
+import gymnasium as gym 
 from gymnasium import spaces
+from gymnasium.spaces.utils import flatten
 import numpy as np
 import random
 
@@ -23,7 +24,11 @@ class GoFishEnv(gym.Env):
             "opponent_hand_size": spaces.Discrete(53),
             "agent_sets_completed": spaces.Discrete(14),
             "opponent_sets_completed": spaces.Discrete(14),
-            "is_agent_turn": spaces.Discrete(2)
+            "is_agent_turn": spaces.Discrete(2),
+            "last_agent_ask": spaces.Discrete(14), # 0-12, 13 for no ask yet
+            "last_agent_ask_success": spaces.Discrete(2), # Yes or no
+            "last_opponent_ask": spaces.Discrete(14),
+            "last_opponent_ask_success": spaces.Discrete(2)
             })
 
         # Define game environment
@@ -33,6 +38,12 @@ class GoFishEnv(gym.Env):
         self.agent_sets = [0] * 13 # Completed sets of 4 cards
         self.opponent_sets = [0] * 13
         self.turn = 0
+
+        # Give the agent recent memory
+        self.last_agent_ask = 13
+        self.last_agent_ask_success = 0
+        self.last_opponent_ask = 13
+        self.last_opponent_ask_success = 0
 
         
     def reset(self, seed=None, options=None):
@@ -73,6 +84,12 @@ class GoFishEnv(gym.Env):
         self.opponent_sets = [0]*13
         self.turn = 0
 
+        # Reset memory
+        self.last_agent_ask = 13
+        self.last_agent_ask_success = 0
+        self.last_opponent_ask = 13
+        self.last_opponent_ask_success = 0
+
         # Set initial observations
         obs = self._get_observation()
         return obs, {}
@@ -84,19 +101,27 @@ class GoFishEnv(gym.Env):
         elif self.mode == "play":
             return self.step_play(action)
         else:
-            print("This should be unreachable, line 87 of GoFishEnv")
+            print("This should be unreachable, line 104 of GoFishEnv")
 
-    def step_play(self, action):
+    def step_play(self, action, obs=None):
+        if obs is None:
+            obs = self._get_observation()
         # Human turn
         if self.agent_turn:
-            if not self._can_ask(action):
+            if not self._can_ask(action, player="agent"):
                 self.agent_turn = False
                 return self._get_observation(), -0.1, False, False, {"reason": "invalid_action"}
 
             success = self._process_ask(action, player="agent")
             self._update_sets()
+
+            # track human ask
+            self.last_agent_ask = action
+            self.last_agent_ask_success = int(success)
+              
             reward = 0.01
             if success:
+                self._check_empty_hand()
                 reward += 0.3 * self.opponent_hand.count(action)
                 if self.agent_hand.count(action) == 1:
                     reward -= 0.5
@@ -113,8 +138,36 @@ class GoFishEnv(gym.Env):
 
         # Agent acting as opponent for play mode
         else:
+            if hasattr(self, "model") and self.model is not None:
+                opponent_obs = self._get_opponent_observation()
+                flat_obs = flatten(self.observation_space, opponent_obs)
+                action, _ = self.model.predict(flat_obs, deterministic=True)
+                valid_asks = [rank for rank in range(13) if rank in self.opponent_hand]
+                # If agent attempts illegal move
+                if action not in valid_asks:
+                    if valid_asks:
+                        action = random.choice(valid_asks)
+                    else:
+                        action = 0
+                        
+                print(f'\nOpponent asked for: {action}')
+                
+            else: # Fall back
+                valid_asks = [rank for rank in range(13) if rank in self.opponent_hand]
+                # If agent attempts illegal move
+                if action not in valid_asks:
+                    if valid_asks:
+                        action = random.choice(valid_asks)
+                    else:
+                        action = 0
+                print(f'\nOpponent asked for {action} via fallback')
+                
             success = self._process_ask(action, player="opponent")
             self._update_sets()
+            self._check_empty_hand()
+
+            self.last_opponent_ask = action
+            self.last_opponent_ask_success = int(success)
 
             if success:
                 done = self._check_game_over()
@@ -132,20 +185,29 @@ class GoFishEnv(gym.Env):
     # Function for training model, not for play
     def training_step(self, action): # Must return observation, reward, terminated, truncated, info
         # Action is just asking do you have rank 2, 3, etc
+        
         # Make sure agent doesn't act out of turn, go to opponent turn if they do
         if not self.agent_turn or not self._can_ask(action):
-            reward = -0.1
+            reward = -1.0
             reason = "moved_out_of_turn" if not self.agent_turn else "invalid_action"
             
             self.agent_turn = False
 
             # Opponent turn, asks for whatever card it has the most of 
             while self.opponent_hand and not self._check_game_over():
-                # opponent_rank = random.choice(list(set(self.opponent_hand)))
+                
                 counts = [self.opponent_hand.count(r) for r in range(13)]
                 opponent_rank = int(np.argmax(counts))
+                    
                 success = self._process_ask(opponent_rank, player="opponent")
                 self._update_sets()
+
+                self.last_opponent_ask = opponent_rank
+                self.last_opponent_ask_success = int(success)
+
+                # Draw additional card if someone runs out of cards during turn
+                self._check_empty_hand()
+                
 
                 if not success:
                     # Opponent go fish
@@ -159,16 +221,19 @@ class GoFishEnv(gym.Env):
             return self._get_observation(), reward, done, False, {"reason": reason}
 
         reward = 0.01
-        
-        # Validate action
-        #if not self._can_ask(action): # Illegal move
-        #    reward = -1
-        #    return self._get_observation(), reward, True, False, {}
             
         prev_sets = sum(self.agent_sets)
         opp_hand_prev = len(self.opponent_hand)
         success = self._process_ask(action, player="agent")
         self._update_sets()
+
+        self.last_agent_ask = action
+        self.last_agent_ask_success = int(success)
+
+        # Draw cards if hand is empty
+        self._check_empty_hand()
+
+        # Reward based on how many new cards are receievd and new sets 
         updated_sets = sum(self.agent_sets)
         new_sets = updated_sets - prev_sets
         new_cards = opp_hand_prev - len(self.opponent_hand)
@@ -205,6 +270,10 @@ class GoFishEnv(gym.Env):
             opponent_rank = int(np.argmax(counts))
             success = self._process_ask(opponent_rank, player="opponent")
             self._update_sets()
+            self._check_empty_hand()
+
+            self.last_opponent_ask = opponent_rank
+            self.last_opponent_ask_success = int(success)
 
             if not success:
                 # Opponent go fish
@@ -234,14 +303,21 @@ class GoFishEnv(gym.Env):
             "opponent_hand_size": len(self.opponent_hand),
             "agent_sets_completed": sum(self.agent_sets),
             "opponent_sets_completed": sum(self.opponent_sets),
-            "is_agent_turn": int(self.agent_turn)
+            "is_agent_turn": int(self.agent_turn),
+            "last_agent_ask": self.last_agent_ask,
+            "last_agent_ask_success": self.last_agent_ask_success,
+            "last_opponent_ask": self.last_opponent_ask,
+            "last_opponent_ask_success": self.last_opponent_ask_success
             }
         
         return obs
 
-    def _can_ask(self, rank):
-        # Verify legal moves with True or False
-        return rank in self.agent_hand
+    def _can_ask(self, rank, player="agent"):
+        if player == "agent":
+            # Verify legal moves with True or False
+            return rank in self.agent_hand
+        else:
+            return rank in self.opponent_hand
 
     def _process_ask(self, rank, player):
         # Agent or opponent asks for a rank
@@ -266,9 +342,6 @@ class GoFishEnv(gym.Env):
             return True
 
         else:
-            if self.deck:
-                draw = self.deck.pop(0)
-                asker.append(draw)
             return False
 
     # Function to note complete sets 
@@ -293,3 +366,39 @@ class GoFishEnv(gym.Env):
     # Model assignment
     def set_model(self, model):
         self.model = model
+
+    def _get_opponent_observation(self):
+        # Reverse perspective of observations
+        opponent_hand_vector = [self.opponent_hand.count(rank) for rank in range(13)]
+        
+        obs = {
+            "agent_hand_ranks": opponent_hand_vector,  # Opponent's hand from their perspective
+            "opponent_hand_size": len(self.agent_hand),  # Human player's hand size
+            "agent_sets_completed": sum(self.opponent_sets),  # Opponent's sets
+            "opponent_sets_completed": sum(self.agent_sets),  # Human's sets
+            "is_agent_turn": 1,  # It's the opponent's turn, so from their perspective it's their turn
+            # Previous move memory gets flipped in this case
+            "last_agent_ask": self.last_opponent_ask,
+            "last_agent_ask_success": self.last_opponent_ask_success,
+            "last_opponent_ask": self.last_agent_ask,
+            "last_opponent_ask_success": self.last_agent_ask_success
+        }
+        
+        return obs
+
+    # Handle empty hand, skip turn if no cards left in deck (shouldn't happen)
+    def _check_empty_hand(self):
+        if self.agent_turn:
+            if not self.agent_hand:
+                if self.deck:
+                    self.agent_hand.append(self.deck.pop())
+                else:
+                    self.agent_turn = False
+
+        else:
+            if not self.opponent_hand:
+                if self.deck:
+                    self.opponent_hand.append(self.deck.pop())
+                else:
+                    self.agent_turn = True
+        
