@@ -21,14 +21,19 @@ for game in range(NUM_GAMES):
     env = FlattenObservation(GoFishEnv())
     obs, _ = env.reset()
     done = False
-
+    
     while not done:
         action, _ = model.predict(obs)
-        obs, reward, done, _, _ = env.step(action)
-
+        
+        # Fix: Convert numpy array action to integer
+        if isinstance(action, np.ndarray):
+            action = int(action.item())
+        
+        obs, reward, done, truncated, info = env.step(action)
+    
     agent_sets = sum(env.unwrapped.agent_sets)
     opponent_sets = sum(env.unwrapped.opponent_sets)
-
+    
     if agent_sets == 0 and opponent_sets == 0:
         zero_games += 1
         result = "NO PROGRESS"
@@ -41,7 +46,7 @@ for game in range(NUM_GAMES):
     else:
         ties += 1
         result = "TIE"
-
+    
     if SHOW_GAME_SUMMARY:
         print(f"Game {game+1}: {result} (Agent: {agent_sets}, Opponent: {opponent_sets})")
 

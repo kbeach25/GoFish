@@ -115,6 +115,9 @@ class GoFishEnv(gym.Env):
     def step_play(self, action, obs=None):
         if obs is None:
             obs = self._get_observation()
+
+        self._ensure_playable_hands()
+        
         # Human turn
         if self.agent_turn:
             if not self._can_ask(action, player="agent"):
@@ -130,7 +133,8 @@ class GoFishEnv(gym.Env):
               
             reward = 0.01
             if success:
-                self._check_empty_hand()
+                # self._check_empty_hand()
+                self._ensure_playable_hand()
                 reward += 0.3 * self.opponent_hand.count(action)
                 if self.agent_hand.count(action) == 1:
                     reward -= 0.5
@@ -173,7 +177,8 @@ class GoFishEnv(gym.Env):
                 
             success = self._process_ask(action, player="opponent")
             self._update_sets()
-            self._check_empty_hand()
+            # self._check_empty_hand()
+            self._ensure_playable_hands()
 
             self.last_opponent_ask = action
             self.last_opponent_ask_success = int(success)
@@ -194,6 +199,7 @@ class GoFishEnv(gym.Env):
     # Function for training model, not for play
     def training_step(self, action): # Must return observation, reward, terminated, truncated, info
         # Action is just asking do you have rank 2, 3, etc
+        self._ensure_playable_hands()
         
         # Make sure agent doesn't act out of turn, go to opponent turn if they do
         if not self.agent_turn or not self._can_ask(action):
@@ -215,7 +221,8 @@ class GoFishEnv(gym.Env):
                 self.last_opponent_ask_success = int(success)
 
                 # Draw additional card if someone runs out of cards during turn
-                self._check_empty_hand()
+                # self._check_empty_hand()
+                self._ensure_playable_hands()
                 
 
                 if not success:
@@ -302,6 +309,8 @@ class GoFishEnv(gym.Env):
 
             self.last_opponent_ask = opponent_rank
             self.last_opponent_ask_success = int(success)
+
+            self._ensure_playable_hands()
 
             if not success:
                 # Opponent go fish
@@ -418,21 +427,30 @@ class GoFishEnv(gym.Env):
         
         return obs
 
+    def _ensure_playable_hands(self):
+        if not self.agent_hand and self.deck and not self._check_game_over():
+            self.agent_hand.append(self.deck.pop())
+
+        if not self.opponent_hand and self.deck and not self._check_game_over():
+            self.opponent_hand.append(self.deck.pop())
+
     # Handle empty hand, skip turn if no cards left in deck (shouldn't happen)
     def _check_empty_hand(self):
-        if self.agent_turn:
-            if not self.agent_hand:
-                if self.deck:
-                    self.agent_hand.append(self.deck.pop())
-                else:
-                    self.agent_turn = False
+        # Found better method but keep this function because it's already used
+        self._ensure_playable_hands()
+        #if self.agent_turn:
+        #    if not self.agent_hand:
+        #        if self.deck:
+        #            self.agent_hand.append(self.deck.pop())
+        #        else:
+        #            self.agent_turn = False
 
-        else:
-            if not self.opponent_hand:
-                if self.deck:
-                    self.opponent_hand.append(self.deck.pop())
-                else:
-                    self.agent_turn = True
+        #else:
+        #    if not self.opponent_hand:
+        #        if self.deck:
+        #            self.opponent_hand.append(self.deck.pop())
+        #        else:
+        #            self.agent_turn = True
 
     def _remove_old_fails(self):
         for rank in list(self.recent_failed_asks.keys()):

@@ -30,12 +30,12 @@ while not done:
             print(f"- Rank {i}: {count} card(s)")
             player_shown.append(i)
 
-    print("\nOpponent's hand:")
+ #   print("\nOpponent's hand:")
     opp_counts = []
     for i in range(13):
         count = base_env.opponent_hand.count(i)
         if count > 0:
-            print(f"- Rank {i}: {count} card(s)")
+     #       print(f"- Rank {i}: {count} card(s)")
             opp_counts.append((i, count))
 
     print("\n======================")
