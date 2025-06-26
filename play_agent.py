@@ -19,6 +19,9 @@ done = False
 print("Welcome to Go Fish! You're playing against a trained agent.\n")
 
 while not done:
+    # Ensure hands are playable
+    base_env._check_empty_hand()
+    
     # Always show both hands
     print("\n=== Current Hands ===")
 
