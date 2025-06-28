@@ -64,6 +64,8 @@ class GoFishEnv(gym.Env):
         if coin_flip == 1:
             first = 1
 
+        self.coin_flip_result = coin_flip
+
         self.agent_turn = True if first == 0 else False
 
             
@@ -202,11 +204,16 @@ class GoFishEnv(gym.Env):
             
             self.agent_turn = False
 
-            # Opponent turn, asks for whatever card it has the most of 
+            # Opponent turn, asks for whatever card it has the most of or a random card
             while self.opponent_hand and not self._check_game_over():
                 
                 counts = [self.opponent_hand.count(r) for r in range(13)]
                 opponent_rank = int(np.argmax(counts))
+
+                # 30% chance of a random ask, trying to make opponent less predictable 
+                random_move = random.uniform(1, 100)
+                if random_move <= 30:
+                    opponent_rank = random.choice(counts)
                     
                 success = self._process_ask(opponent_rank, player="opponent")
                 self._update_sets()
