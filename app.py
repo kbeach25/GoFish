@@ -61,6 +61,34 @@ def getCoinFlipCards(deck, coin_flip_result):
 
     return player_card, opponent_card
 
+# Card dealing visual
+def deal(deck, coin_flip):
+    remaining_deck = deck.copy()
+    player_hand = []
+    opponent_hand = []
+    total_dealt = 0
+
+    for each in range(14):
+        # End once all cards have been dealt
+        if total_dealt >= 14:
+            break
+
+        card = remaining_deck.pop()
+
+        if coin_flip == 0:
+            if each%2 ==0:
+                player_hand.append(card)
+            else:
+                opponent_hand.append(card)
+
+        else:
+            if each%2 == 0:
+                opponent_hand.append(card)
+            else:
+                player_hand.append(card)
+
+        return player_hand, opponent_hand, remaining_deck
+
 # Start streamlit app with default values
 if "validated" not in st.session_state:
     st.session_state.validated = False
@@ -76,6 +104,8 @@ if "player_card" not in st.session_state:
     st.session_state.player_card = None
 if "opponent_card" not in st.session_state:
     st.session_state.opponent_card = None
+if "game_ready" not in st.session_state:
+    st.session_state.game_ready = False
 
 # Pre-game landing screen
 if not st.session_state.started:
@@ -109,7 +139,19 @@ if not st.session_state.started:
 
                 # Set model depending on difficulty
                 if st.session_state.difficulty == "Easy":
-                    st.session_state.model = PPO.load("GoFish_model")
+                    st.session_state.model = PPO.load("GoFish_model") # Change this line for other models
+                    st.session_state.env.reset()
+                    st.session_state.coin_flip_result = st.session_state.env.coin_flip_result
+                    st.session_state.env.set_model(st.session_state.model)
+
+                elif st.session_state.difficulty == "Medium":
+                    st.session_state.model = PPO.load("GoFish_model") # Change this line for other models
+                    st.session_state.env.reset()
+                    st.session_state.coin_flip_result = st.session_state.env.coin_flip_result
+                    st.session_state.env.set_model(st.session_state.model)
+
+                elif st.session_state.difficulty == "Hard":
+                    st.session_state.model = PPO.load("GoFish_model") # Change this line for other models
                     st.session_state.env.reset()
                     st.session_state.coin_flip_result = st.session_state.env.coin_flip_result
                     st.session_state.env.set_model(st.session_state.model)
@@ -118,79 +160,90 @@ if not st.session_state.started:
 
 
 # Start the game 
-if st.session_state.started:
+if st.session_state.started and not st.session_state.game_ready:
     # Set difficulty based on dropdown
     difficulty = st.session_state.difficulty
 
     # Draw random cards to reflect coin flip results
-    if not st.session_state.coin_flip_shown and not st.session_state.cards_drawn:
+    if not st.session_state.cards_drawn:
         st.markdown("<h5 style='text-align: center;'>You and your opponent will both draw a card, the higher draw goes first</h5>", unsafe_allow_html=True)
         
         col1, col2, col3 = st.columns([1, 1, 1])
         with col2:
             if st.button("Draw Card", key="draw_card_btn", type="primary"):
-                st.session_state.coin_flip_shown = True
+                st.session_state.player_card, st.session_state.opponent_card = getCoinFlipCards(st.session_state.deck, st.session_state.coin_flip_result)
                 st.session_state.cards_drawn = True
 
-                st.session_state.player_card, st.session_state.opponent_card = getCoinFlipCards(st.session_state.deck, st.session_state.coin_flip_result)
-
-                # time.sleep(3)
                 st.rerun()
 
-        if st.session_state.get('cards_drawn', False):
-            col1, col2, col3 = st.columns([1, 1, 1])
+    # Show drawn cards
+    elif st.session_state.cards_drawn and not st.session_state.coin_flip_shown:
+        col1, col2, col3 = st.columns([1, 1, 1])
+        
+        with col1:
+            st.markdown("**Your Card**")
+            # Display player card image
+            col1.image(st.session_state.player_card['image'], width=200)
+            st.markdown(f"*{st.session_state.player_card['value']} of {st.session_state.player_card['suit']}*")
             
-            with col1:
-                st.markdown("**Player Card**")
-                # Display player card image
-                col1.image(st.session_state.player_card['image'], width=200)
-                st.markdown(f"*{st.session_state.player_card['value']} of {st.session_state.player_card['suit']}*")
-                print("success 1")
+        with col2:
+            st.write("")  # Empty middle column for spacing
             
-            with col2:
-                st.write("")  # Empty middle column for spacing
+        with col3:
+            st.markdown("**Opponent Card**")
+            # Display player card image
+            col3.image(st.session_state.opponent_card['image'], width=200)
+            st.markdown(f"*{st.session_state.opponent_card['value']} of {st.session_state.player_card['suit']}*")
             
-            with col3:
-                st.markdown("**Opponent Card**")
-                # Display player card image
-                col3.image(st.session_state.opponent_card['image'], width=200)
-                st.markdown(f"*{st.session_state.opponent_card['value']} of {st.session_state.player_card['suit']}*")
+        # Show who goes first
+        if st.session_state.coin_flip_result == 0:
+            st.markdown("<h4 style='text-align: center; color: green;'>You drew the higher card! You go first.</h4>", unsafe_allow_html=True)
+        else:
+            st.markdown("<h4 style='text-align: center; color: red;'>Opponent drew the higher card! Opponent goes first.</h4>", unsafe_allow_html=True)
 
-            time.sleep(3)
-            
-            # Show who goes first
-            if st.session_state.coin_flip_result == 0:
-                st.markdown("<h4 style='text-align: center; color: green;'>You drew the higher card! You go first.</h4>", unsafe_allow_html=True)
-            else:
-                st.markdown("<h4 style='text-align: center; color: red;'>Opponent drew the higher card! Opponent goes first.</h4>", unsafe_allow_html=True)
+        # Advance to game button
+        col1, col2, col3 = st.columns([1, 1, 1])
+        with col2:
+            if st.button("Advance to Game", key="adv_btn", type="primary"):
+                st.session_state.coin_flip_shown = True
+                st.session_state.game_ready = True
+                st.rerun()
+
+
+    else:
+        print("This should be unreachable, line 174")        
                 
 
-    else: 
-        # Set up "deck" like you would see on a table
-        deck_view = st.empty()
+# Main gameplay  
+elif st.session_state.started and st.session_state.game_ready: 
+    # Set up "deck" like you would see on a table
+    deck_view = st.empty()
 
-        # Use column formatting again
-        with deck_view.container():
+    # Use column formatting again
+    with deck_view.container():
 
-            # Temporary spacing solution
-            st.write("")
-            st.write("")
-            st.write("")
-            st.write("")
-            st.write("")
-            st.write("")
-            st.write("")
-            st.write("")
-            st.write("")
+        # Temporary spacing solution
+        st.write("")
+        st.write("")
+        st.write("")
+        st.write("")
+        st.write("")
+        st.write("")
+        st.write("")
+        st.write("")
+        st.write("")
 
-            col1, col2, col3 = st.columns([1, 2, 1])
+        col1, col2, col3 = st.columns([1, 2, 1])
 
-            with col2:
-                st.image('card_back.png', width=100)
-                st.markdown(f'*Deck Cards: {len(st.session_state.deck)}*')
+        with col2:
+            st.image('card_back.png', width=100)
+            st.markdown(f'*Deck Cards: {len(st.session_state.deck)}*')
 
-            coin_flip_result = st.session_state.coin_flip_result
-            st.markdown(coin_flip_result)
+
+    model = st.session_state.env
+    env = FlattenObservation(model)
+
+        
         
 
 
