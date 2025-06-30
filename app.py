@@ -38,6 +38,37 @@ def fixFaces(value):
     else:
         return int(value)
 
+# Need to communicate 3-ACE ranking system with 0-13 ranking system
+def convertRank(rank, translation):
+    
+    # From 0-13 scale to suit scale 
+    if translation == "to_suit":
+        suit_rank = int(rank) + 2
+        if suit_rank == 11:
+            return "JACK"
+        elif suit_rank == 12:
+            return "QUEEN"
+        elif suit_rank == 13:
+            return "KING"
+        elif suit_rank == 14:
+            return "ACE"
+        else:
+            return suit_rank
+
+    # From suit scale to 0-13 scale, the way the environment understands it 
+    elif translation == "to_env":
+        if rank == "JACK":
+            return 11
+        elif rank == "QUEEN":
+            return 12
+        elif rank == "KING":
+            return 13
+        elif rank == "ACE":
+            return 14
+        else:
+            return int(rank) - 2
+        
+
 def getCoinFlipCards(deck, coin_flip_result):
     available_cards = deck.copy()
 
@@ -63,31 +94,87 @@ def getCoinFlipCards(deck, coin_flip_result):
 
 # Card dealing visual
 def deal(deck, coin_flip):
-    remaining_deck = deck.copy()
-    player_hand = []
-    opponent_hand = []
-    total_dealt = 0
+    if not st.session_state.dealing_in_progress:
+        # st.session_state.remaining_deck = deck.copy()
+        st.session_state.player_hand = []
+        st.session_state.opponent_hand = []
+        st.session_state.cards_dealt = 0
+        st.session_state.dealing_in_progress = True
 
-    for each in range(14):
-        # End once all cards have been dealt
-        if total_dealt >= 14:
-            break
+    if st.session_state.cards_dealt < 14:
+        card = st.session_state.deck.pop()
 
-        card = remaining_deck.pop()
-
+        # Player gets dealt to first 
         if coin_flip == 0:
-            if each%2 ==0:
-                player_hand.append(card)
+            if st.session_state.cards_dealt % 2 == 0:
+                st.session_state.player_hand.append(card)
             else:
-                opponent_hand.append(card)
+                st.session_state.opponent_hand.append(card)
 
+        # Opponent gets dealt to first 
         else:
-            if each%2 == 0:
-                opponent_hand.append(card)
+            if st.session_state.cards_dealt % 2 == 0:
+                st.session_state.opponent_hand.append(card)
             else:
-                player_hand.append(card)
+                st.session_state.player_hand.append(card)
 
-        return player_hand, opponent_hand, remaining_deck
+        st.session_state.cards_dealt += 1
+
+        if st.session_state.cards_dealt >= 14:
+            st.session_state.dealing_complete = True
+
+    return st.session_state.cards_dealt >= 14
+
+def display_opponent_hand():
+    if st.session_state.opponent_hand:
+        st.markdown("**Opponent's Hand**")
+        
+        # Opponent's hand just uses card_back.png
+
+        #1 row total, 1 column per card, max at 7
+        cols = st.columns(7)
+
+        # Row spacing for opponent hand
+        hand_cards = min(7, len(st.session_state.opponent_hand))
+        start_col = (7-hand_cards) // 2
+
+        for each in range(hand_cards):
+            with cols[start_col + each]:
+                st.image('card_back.png', width=100)
+
+        # Card count
+        st.markdown(f'*Cards: {len(st.session_state.opponent_hand)}*', unsafe_allow_html=True)
+
+
+def display_player_hand():
+    if st.session_state.player_hand:
+        st.markdown("**Your Hand**")
+        # Using 7 cards per row
+        cards_per_row = 7
+        rows = (len(st.session_state.player_hand) + cards_per_row - 1) // cards_per_row
+
+        for row in range(rows):
+            start_idx = row * cards_per_row
+            end_idx = min(start_idx + cards_per_row, len(st.session_state.player_hand))
+            row_cards = st.session_state.player_hand[start_idx:end_idx]
+
+            # Always create exactly 7 columns for consistency
+            cols = st.columns(7)
+            
+            # Center the cards in this row
+            cards_in_row = len(row_cards)
+            start_col = (7 - cards_in_row) // 2
+            
+            for i, card in enumerate(row_cards):
+                with cols[start_col + i]:
+                    st.image(card['image'], width=100)
+                    st.markdown(f'<div style="text-align: center;"><em>{card["value"]}</em></div>', 
+                               unsafe_allow_html=True)
+
+        # Card count below, centered
+        st.markdown(f'<div style="text-align: center;"><em>Cards: {len(st.session_state.player_hand)}</em></div>', 
+                   unsafe_allow_html=True)
+    
 
 # Start streamlit app with default values
 if "validated" not in st.session_state:
@@ -106,6 +193,25 @@ if "opponent_card" not in st.session_state:
     st.session_state.opponent_card = None
 if "game_ready" not in st.session_state:
     st.session_state.game_ready = False
+if "dealing_complete" not in st.session_state:
+    st.session_state.dealing_complete = False
+if "dealing_in_progress" not in st.session_state:
+    st.session_state.dealing_in_progress = False
+if "player_hand" not in st.session_state:
+    st.session_state.player_hand = []
+if "opponent_hand" not in st.session_state:
+    st.session_state.opponent_hand = []
+if "remaining_deck" not in st.session_state:
+    st.session_state.remaining_deck = []
+if "cards_dealt" not in st.session_state:
+    st.session_state.cards_dealt = 0
+if "done" not in st.session_state:
+    st.session_state.done = False
+if "selected_rank" not in st.session_state:
+    st.session_state.selected_rank = None
+if "player_shown" not in st.session_state:
+    st.session_state.player_shown = []
+
 
 # Pre-game landing screen
 if not st.session_state.started:
@@ -204,7 +310,7 @@ if st.session_state.started and not st.session_state.game_ready:
         # Advance to game button
         col1, col2, col3 = st.columns([1, 1, 1])
         with col2:
-            if st.button("Advance to Game", key="adv_btn", type="primary"):
+            if st.button("Begin Game", key="adv_btn", type="primary"):
                 st.session_state.coin_flip_shown = True
                 st.session_state.game_ready = True
                 st.rerun()
@@ -215,33 +321,139 @@ if st.session_state.started and not st.session_state.game_ready:
                 
 
 # Main gameplay  
-elif st.session_state.started and st.session_state.game_ready: 
-    # Set up "deck" like you would see on a table
-    deck_view = st.empty()
+elif st.session_state.started and st.session_state.game_ready:
 
-    # Use column formatting again
-    with deck_view.container():
+    # Begin dealing
+    if not st.session_state.dealing_in_progress and not st.session_state.dealing_complete:
+        st.session_state.dealing_in_progress = True
+        st.rerun()
 
-        # Temporary spacing solution
-        st.write("")
-        st.write("")
-        st.write("")
-        st.write("")
-        st.write("")
-        st.write("")
-        st.write("")
-        st.write("")
-        st.write("")
+    # Dealing in progress
+    elif st.session_state.dealing_in_progress and not st.session_state.dealing_complete:
 
-        col1, col2, col3 = st.columns([1, 2, 1])
+        # Opponent hand at top
+        display_opponent_hand()
+
+        
+        col1, col2, col3 = st.columns([1, 1, 1])
 
         with col2:
             st.image('card_back.png', width=100)
             st.markdown(f'*Deck Cards: {len(st.session_state.deck)}*')
 
+        display_player_hand()
 
-    model = st.session_state.env
-    env = FlattenObservation(model)
+        if st.session_state.cards_dealt < 14:
+            time.sleep(0.2)
+            deal(st.session_state.deck, st.session_state.coin_flip_result)
+            st.rerun()
+
+    # Dealing is done, cards are on display and game can start 
+    elif st.session_state.dealing_complete:
+        # Opponent hand in top row
+        display_opponent_hand()
+
+        # spacing
+        st.markdown("---")
+        
+        col1, col2, col3 = st.columns([1, 1, 1])
+        
+        with col2:
+            st.image('card_back.png', width=100)
+            st.markdown(f'*Deck Cards: {len(st.session_state.deck)}*')
+
+        st.markdown("---")
+
+        # Player hand at the bottom
+        display_player_hand()
+    
+
+        # Actual game starts 
+        base_env = st.session_state.env
+        env = FlattenObservation(base_env)
+
+        if st.session_state.done == False:
+            # Ensure hands are playable 
+            base_env._check_empty_hand()
+
+            # Player's turn
+            if base_env.agent_turn:
+                player_shown = []
+                for each in range(13):
+                    # count = base_env.agent_hand.count(each)
+                    count = st.session_state.player_hand.count(each)
+                    if count > 0:
+                        player_shown.append(each)
+
+
+                st.session_state.player_shown = player_shown
+
+                # Show legal moves if player has cards
+                if player_shown:
+                    st.markdown("**Choose a rank to ask for:**")
+
+                    cols = st.columns(len(player_shown))
+
+                    for idx, rank in enumerate(player_shown):
+                        with cols[idx]:
+                            # Show the number of each rank
+                            # count = base_env.agent_hand.count(rank)
+                            count = st.session_state.player_hand.count(rank)
+                            btn_lbl = f'Rank {rank}\n({count} cards)'
+
+                            if st.button(btn_lbl, key=f'rank_{rank}',
+                                         type = "primary" if st.session_state.selected_rank == rank else "secondary"):
+                                st.session_state.selected_rank = rank
+
+                    if st.session_state.selected_rank is not None:
+                        st.markdown(f"**Selected:** Rank {st.session_state.selected_rank}")
+            
+                        col1, col2, col3 = st.columns([1, 1, 1])
+                        
+                        with col2:
+                            if st.button("Confirm", key="confirm", type="primary"):
+                                # Translate action from suit to env
+                                action = st.session_state.selected_rank
+                                translated_action = convertRank(action, "to_env")
+
+                                # Execute move
+                                obs, reward, done, _, info = env.step(translated_action)
+
+                                # Reset selection
+                                st.session_state.selected_rank = None
+
+                                # Update game state
+                                st.session_state.done = done
+
+                                st.rerun()
+
+                    else:
+                        st.info("Select a rank to ask for.")
+
+                else:
+                    st.error("Hand is empty, game should be over")
+
+            # Opponent turn
+            else:
+                time.sleep(1)
+
+                current_obs = flatten(base_env.observation_space, base_env._get_observation())
+
+                # Convert action from suit to env
+                action, _ = st.session_state.model.predict(current_obs, deterministic=True)
+                translated_action = convertRank(action, "to_env")
+                st.markdown(f"Opponent asked for: **Rank {action}**")
+
+                obs, reward, done, _, info = env.step(translated_action)
+                st.session_state.done = done
+
+                time.sleep(2)
+                st.rerun()
+                                
+                                
+            
+
+        
 
         
         
