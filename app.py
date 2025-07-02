@@ -44,6 +44,7 @@ def convertRank(rank, translation):
     # From 0-13 scale to suit scale 
     if translation == "to_suit":
         suit_rank = int(rank) + 2
+        
         if suit_rank == 11:
             return "JACK"
         elif suit_rank == 12:
@@ -53,18 +54,18 @@ def convertRank(rank, translation):
         elif suit_rank == 14:
             return "ACE"
         else:
-            return suit_rank
+            return str(suit_rank)
 
     # From suit scale to 0-13 scale, the way the environment understands it 
     elif translation == "to_env":
         if rank == "JACK":
-            return 11
+            return 9
         elif rank == "QUEEN":
-            return 12
+            return 10
         elif rank == "KING":
-            return 13
+            return 11
         elif rank == "ACE":
-            return 14
+            return 12
         else:
             return int(rank) - 2
         
@@ -381,7 +382,14 @@ elif st.session_state.started and st.session_state.game_ready:
                 player_shown = []
                 for each in range(13):
                     # count = base_env.agent_hand.count(each)
-                    count = st.session_state.player_hand.count(each)
+                    # count = st.session_state.player_hand.count(each)
+
+                    count = 0
+                    for card in st.session_state.player_hand:
+                        card_rank = convertRank(card['value'], "to_env")
+                        if card_rank == each:
+                            count += 1
+                            
                     if count > 0:
                         player_shown.append(each)
 
@@ -398,15 +406,27 @@ elif st.session_state.started and st.session_state.game_ready:
                         with cols[idx]:
                             # Show the number of each rank
                             # count = base_env.agent_hand.count(rank)
-                            count = st.session_state.player_hand.count(rank)
-                            btn_lbl = f'Rank {rank}\n({count} cards)'
+                            # count = st.session_state.player_hand.count(rank)
+
+                            count = 0
+                            for card in st.session_state.player_hand:
+                                card_rank = convertRank(card['value'], "to_env")
+                                if card_rank == rank:
+                                    count += 1
+
+                            display = convertRank(rank, "to_suit")
+                            display = str(display) if isinstance(display, int) else display
+                                    
+                            btn_lbl = f'Rank {display}\n({count} cards)'
 
                             if st.button(btn_lbl, key=f'rank_{rank}',
                                          type = "primary" if st.session_state.selected_rank == rank else "secondary"):
                                 st.session_state.selected_rank = rank
 
                     if st.session_state.selected_rank is not None:
-                        st.markdown(f"**Selected:** Rank {st.session_state.selected_rank}")
+                        display = convertRank(st.session_state.selected_rank, "to_suit")
+                        display = str(display) if isinstance(display, int) else display
+                        st.markdown(f"**Selected:** Rank {display}")
             
                         col1, col2, col3 = st.columns([1, 1, 1])
                         
@@ -419,11 +439,42 @@ elif st.session_state.started and st.session_state.game_ready:
                                 # Execute move
                                 obs, reward, done, _, info = env.step(translated_action)
 
+                                # See if ask was successful
+                                success = base_env.last_agent_ask_success == 1
+
+                                if success:
+                                    moved_cards = []
+                                    remaining_opponent_hand = []
+                                    for card in st.session_state.opponent_hand:
+                                        card_rank_val = convertRank(card['value'], "to_env")
+
+                                        # Translated action is the requested rank
+                                        # Successful ask
+                                        if card_rank_val == translated_action:
+                                            moved_cards.append(card)
+
+                                        # Unsuccessful ask
+                                        else:
+                                            remaining_opponent_hand.append(card)
+
+                                        st.session_state.opponent_hand = remaining_opponent_hand
+                                        st.session_state.player_hand.extend(moved_cards)
+                                        
+                                else:
+                                   if st.session_state.deck:
+                                       draw = st.session_state.deck.pop()
+                                       st.session_state.player_hand.append(draw)
+
                                 # Reset selection
                                 st.session_state.selected_rank = None
 
                                 # Update game state
                                 st.session_state.done = done
+
+                                if success:
+                                    st.success(f"Successful ask! You took all opponent's {display}s and go again.")
+                                else:
+                                    st.warning(f"No {display}s. You drew a card. Opponent's turn.")
 
                                 st.rerun()
 
@@ -441,26 +492,39 @@ elif st.session_state.started and st.session_state.game_ready:
 
                 # Convert action from suit to env
                 action, _ = st.session_state.model.predict(current_obs, deterministic=True)
-                translated_action = convertRank(action, "to_env")
-                st.markdown(f"Opponent asked for: **Rank {action}**")
+                translated_action = convertRank(action, "to_suit")
+                st.markdown(f"Opponent asked for: **Rank {translated_action}**")
 
-                obs, reward, done, _, info = env.step(translated_action)
+                obs, reward, done, _, info = env.step(action)
                 st.session_state.done = done
+
+                success = base_env.last_opponent_ask_success == 1
+
+                # Successful ask
+                if success:
+                    moved_cards = []
+                    remaining_player_hand = []
+                    for card in st.session_state.player_hand:
+                        card_rank_val = convertRank(card['value'], "to_env")
+                        if card_rank_val == action:
+                            moved_cards.append(card)
+                        else:
+                            remaining_player_hand.append(card)
+
+                    st.session_state.player_hand = remaining_player_hand
+                    st.session_state.opponent_hand.extend(moved_cards)
+
+                    st.success(f"Opponent successfully took your {convertRank(action, 'to_suit')}s.")
+
+                # Unsuccessful ask
+                else:
+                    if st.session_state.deck:
+                        draw = st.session_state.deck.pop()
+                        st.session_state.opponent_hand.append(draw)
+                    st.info(f"Opponent asked for {translated_action}s, but you had none. Opponent drew a card.")
+                    print("____")
+                    print(action)
+                    print(translated_action)
 
                 time.sleep(2)
                 st.rerun()
-                                
-                                
-            
-
-        
-
-        
-        
-
-
-
-        
-
-    
-    
