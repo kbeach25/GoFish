@@ -216,9 +216,12 @@ def check_game_end():
     
     # Game ends when all 13 sets are completed or both hands are empty
     if total_sets >= 13 or (len(st.session_state.player_hand) == 0 and len(st.session_state.opponent_hand) == 0):
+      #  return True
+        st.session_state.done=True
         return True
 
     if len(st.session_state.get('player_sets', [])) >= 7 or len(st.session_state.get('opponent_sets', [])) >= 7:
+        st.session_state.done=True
         return True
     
     return False
@@ -226,7 +229,7 @@ def check_game_end():
 def display_set_completion(sets_completed, player_name):
     if sets_completed:
         for rank in sets_completed:
-            st.success(f"{player_name} completed a set of {rank}s! ")
+            st.info(f"{player_name} completed a set of {rank}s! ")
         
         # Add to session state for tracking
         if "player_sets" not in st.session_state:
@@ -457,20 +460,13 @@ elif st.session_state.started and st.session_state.game_ready:
 
             # Player's turn
             if base_env.agent_turn:
-                player_shown = []
-                for each in range(13):
-                    # count = base_env.agent_hand.count(each)
-                    # count = st.session_state.player_hand.count(each)
+                rank_counts = {}
 
-                    count = 0
-                    for card in st.session_state.player_hand:
-                        card_rank = convertRank(card['value'], "to_env")
-                        if card_rank == each:
-                            count += 1
-                            
-                    if count > 0:
-                        player_shown.append(each)
-
+                for card in st.session_state.player_hand:
+                    rank = convertRank(card['value'], 'to_env')
+                    rank_counts[rank] = rank_counts.get(rank, 0) + 1
+                    
+                player_shown = [rank for rank, count in rank_counts.items() if count > 0]
 
                 st.session_state.player_shown = player_shown
 
@@ -516,6 +512,8 @@ elif st.session_state.started and st.session_state.game_ready:
                                 translated_action = action
 
                                 # Execute move
+                                base_env.agent_hand = [convertRank(card['value'], 'to_env') for card in st.session_state.player_hand]
+                                base_env.opponent_hand = [convertRank(card['value'], 'to_env') for card in st.session_state.opponent_hand]
                                 obs, reward, done, _, info = env.step(translated_action)
 
                                 # See if ask was successful
@@ -536,33 +534,31 @@ elif st.session_state.started and st.session_state.game_ready:
                                         else:
                                             remaining_opponent_hand.append(card)
 
-                                    # see completed sets
-                                    st.session_state.player_hand, updated_agent_hand, player_sets = check_and_remove_sets(st.session_state.player_hand, [convertRank(card['value'], 'to_env') for card in st.session_state.player_hand],"You")
-
                                     st.session_state.opponent_hand = remaining_opponent_hand
                                     st.session_state.player_hand.extend(moved_cards)
 
+                                    # see completed sets
+                                    st.session_state.player_hand, updated_agent_hand, player_sets = check_and_remove_sets(st.session_state.player_hand, [convertRank(card['value'], 'to_env') for card in st.session_state.player_hand],"You")
+
+                                    display_set_completion(player_sets, "You")
+
+                                    
                                     base_env.agent_hand = updated_agent_hand
                                     base_env.opponent_hand = [convertRank(card['value'], 'to_env') for card in st.session_state.opponent_hand]
-
-                                    # Display set completion notification
-                                    # display_set_completion(player_sets, "You")
-
-                                    #for card in moved_cards:
-                                    #    rank = convertRank(card['value'], 'to_env')
-                                    #    base_env.agent_hand.append(rank)
-                                    #    base_env.opponent_hand.remove(rank)
                                         
                                 else:
                                    if st.session_state.deck:
                                        draw = st.session_state.deck.pop()
                                        st.session_state.player_hand.append(draw)
 
-                                       st.session_state.player_hand, updated_agent_hand, player_sets = check_and_remove_sets(st.session_state.player_hand,[convertRank(card['value'], 'to_env') for card in st.session_state.player_hand],"You")
-
                                        base_env.agent_hand.append(convertRank(draw['value'], 'to_env'))
 
-                                # display_set_completion(player_sets, "You")
+                                       st.session_state.player_hand, updated_agent_hand, player_sets = check_and_remove_sets(st.session_state.player_hand,[convertRank(card['value'], 'to_env') for card in st.session_state.player_hand],"You")
+
+
+                                       # display_set_completion(player_sets, "You")
+                                       if check_game_end():
+                                           st.rerun()
 
                                 # Reset selection
                                 st.session_state.selected_rank = None
@@ -570,57 +566,43 @@ elif st.session_state.started and st.session_state.game_ready:
                                 # Update game state
                                 st.session_state.done = done
 
-                                # Debug
-                                #print("Opponent hand:")
-                                #for card in st.session_state.opponent_hand:
-                                #    print(card['value'])
-                                #print("")
-
-                                #display_set_completion(player_sets, "You")
-
                                 if success:
-                                    st.success(f"Successful ask! You took all opponent's {display}s and go again.")
-                                    display_set_completion(player_sets, "You")
-                                    check_game_end()
+                                    st.info(f"Successful ask! You took all opponent's {display}s and go again.")
+                                    #display_set_completion(player_sets, "You")
+                                    #st.session_state.player_hand, updated_agent_hand, player_sets = check_and_remove_sets(st.session_state.player_hand, [convertRank(card['value'], 'to_env') for card in st.session_state.player_hand],"You")
+                                    if st.button("Continue", key="cont_btn_after_successful_ask"):
+                                        if check_game_end():
+                                            st.rerun()
+                                        st.rerun()
                                 else:
-                                    st.warning(f"No {display}s. You drew a card. Opponent's turn.")
-                                    display_set_completion(player_sets, "You")
-                                    check_game_end()
-
-                                    
-                                time.sleep(3)
-                                st.rerun()
+                                    st.info(f"No {display}s. You drew a card. Opponent's turn.")
+                                    #display_set_completion(player_sets, "You")
+                                    #st.session_state.player_hand, updated_agent_hand, player_sets = check_and_remove_sets(st.session_state.player_hand, [convertRank(card['value'], 'to_env') for card in st.session_state.player_hand],"You")
+                                    if st.button("Continue", key="cont_btn_after_failed_ask"):
+                                        if check_game_end():
+                                            st.rerun()
+                                        st.rerun()
 
                     else:
                         st.info("Select a rank to ask for.")
 
                 else:
-                    check_game_end()
-                    # st.error("Hand is empty, game should be over")
+                    if check_game_end():
+                        st.rerun()
 
             # Opponent turn
             else:
-                # time.sleep(1)
 
+                base_env.agent_hand = [convertRank(card['value'], 'to_env') for card in st.session_state.player_hand]
+                base_env.opponent_hand = [convertRank(card['value'], 'to_env') for card in st.session_state.opponent_hand]
                 obs, reward, done, _, info = env.step(0)
                 st.session_state.done = done
 
                 action = info.get("opponent_action", None)
                 success = info.get("opponent_success", False)
 
-                # Debug
-                #print("Opponent hand at start of turn:")
-                #for card in st.session_state.opponent_hand:
-                #    print(card['value'])
-                #print("")
-
                 if action is not None:
                     translated_action = convertRank(action, "to_suit")
-                    # Debug
-                    #print("Opponent ask:")
-                    #print(translated_action)
-                    st.info(f"Opponent asked for: **Rank {translated_action}**")
-                    time.sleep(3)
 
                     if success:
                         moved_cards = []
@@ -643,19 +625,13 @@ elif st.session_state.started and st.session_state.game_ready:
                         base_env.agent_hand = [convertRank(card['value'], 'to_env') for card in st.session_state.player_hand]
                         base_env.opponent_hand = updated_opponent_hand
 
-                        # Display set completion notification
+                        # Display set completion notification                     
+                        st.info(f"Opponent successfully took your {translated_action}s")
                         display_set_completion(opponent_sets, "Opponent")
-
-                        # update environment
-                        #for card in moved_cards:
-                        #    rank = convertRank(card['value'], "to_env")
-                        #    base_env.agent_hand.remove(rank)
-                        #    base_env.opponent_hand.append(rank)
-                            
-                                
-                        st.success(f"Opponent successfully took your {translated_action}s")
-                        time.sleep(2)
-                        check_game_end()
+                        
+                        if st.button("Continue", key="cont_btn_after_info"):
+                            if check_game_end():
+                                st.rerun()
                     else:
                         # go fish if fail
                         if st.session_state.deck:
@@ -668,58 +644,60 @@ elif st.session_state.started and st.session_state.game_ready:
                             base_env.opponent_hand = updated_opponent_hand
         
                             # Display set completion notification
-
-                            #rank = convertRank(draw['value'], 'to_env')
-                            #base_env.opponent_hand.append(rank)
                             
                             st.info(f"Opponent asked for {translated_action}s, but you had none. Opponent drew a card.")
                             display_set_completion(opponent_sets, "Opponent")
-                            time.sleep(3)
-                            check_game_end()
+                            st.session_state.opponent_hand, updated_opponent_hand, opponent_sets = check_and_remove_sets(st.session_state.opponent_hand, [convertRank(card['value'], 'to_env') for card in st.session_state.opponent_hand], "Opponent")
+                            if st.button("Continue", key="cont_btn_after_oppo"):
+                                if check_game_end():
+                                    st.rerun()
+                                st.rerun()
 
                         else:
                             st.info(f"Opponent asked for {translated_action}s, but you had none. No more cards to draw from.")
                             display_set_completion(opponent_sets, "Opponent")
-                            time.sleep(3)
-                            check_game_end()
+                            st.session_state.opponent_hand, updated_opponent_hand, opponent_sets = check_and_remove_sets(st.session_state.opponent_hand, [convertRank(card['value'], 'to_env') for card in st.session_state.opponent_hand], "Opponent")
+                            if st.button("Continue", key="cont_btn_after_info2"):
+                                if check_game_end():
+                                    st.rerun()
+                                st.rerun()
                         
 
                 else:
                     st.warning("Opponent had no legal move")
 
-            if check_game_end():
-                st.session_state.done = True
+        if st.session_state.done == True:
 
-                st.markdown("Game Over")
+            st.markdown("Game Over")
 
-                player_score = len(st.session_state.get('player_sets', []))
-                opponent_score = len(st.session_state.get('opponent_sets', []))
+            player_score = len(st.session_state.get('player_sets', []))
+            opponent_score = len(st.session_state.get('opponent_sets', []))
     
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.markdown(f"**Your Sets:** {player_score}")
-                    if st.session_state.get('player_sets'):
-                        st.write(", ".join(str(s) for s in st.session_state.player_sets))
+            col1, col2 = st.columns(2)
+            with col1:
+                st.markdown(f"**Your Sets:** {player_score}")
+                if st.session_state.get('player_sets'):
+                    st.write(", ".join(str(s) for s in st.session_state.player_sets))
     
-                with col2:
-                    st.markdown(f"**Opponent Sets:** {opponent_score}")
-                    if st.session_state.get('opponent_sets'):
-                        st.write(", ".join(str(s) for s in st.session_state.opponent_sets))
+            with col2:
+                st.markdown(f"**Opponent Sets:** {opponent_score}")
+                if st.session_state.get('opponent_sets'):
+                    st.write(", ".join(str(s) for s in st.session_state.opponent_sets))
     
-                if player_score > opponent_score:
-                    st.success("You Win!")
-                elif opponent_score > player_score:
-                    st.error("Opponent Wins!")
-                else:
-                    st.info("It's a Tie!")
+            if player_score > opponent_score:
+                st.success("You Win!")
+            elif opponent_score > player_score:
+                st.error("Opponent Wins!")
+            else:
+                st.info("It's a Tie!")
 
-                if st.button("Play Again"):
-                    # Reset all game state
-                    for key in list(st.session_state.keys()):
-                        if key != 'started':
-                            del st.session_state[key]
-                        st.session_state.started = False
-                        st.rerun()
+            if st.button("Play Again"):
+                # Reset all game state
+                for key in list(st.session_state.keys()):
+                    if key != 'started':
+                        del st.session_state[key]
+                    st.session_state.started = False
+                    st.rerun()
 
         
-            st.rerun()
+        #st.rerun()
