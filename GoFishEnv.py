@@ -145,51 +145,12 @@ class GoFishEnv(gym.Env):
                 self.agent_turn = False
 
             done = self._check_game_over()
-            return self._get_observation(), reward, done, False, {}
+            return self._get_observation(), reward, done, False, {"agent_success": success}
 
         # Agent acting as opponent for play mode
         else:
-            if hasattr(self, "model") and self.model is not None:
-                opponent_obs = self._get_opponent_observation()
-                flat_obs = flatten(self.observation_space, opponent_obs)
-                action, _ = self.model.predict(flat_obs, deterministic=True)
-                valid_asks = [rank for rank in range(13) if rank in self.opponent_hand]
-                # If agent attempts illegal move
-                if action not in valid_asks:
-                    if valid_asks:
-                        action = random.choice(valid_asks)
-                    else:
-                        action = 0
-                        
-                print(f'\nOpponent asked for: {action}')
-                
-            else: # Fall back
-                valid_asks = [rank for rank in range(13) if rank in self.opponent_hand]
-                # If agent attempts illegal move
-                if action not in valid_asks:
-                    if valid_asks:
-                        action = random.choice(valid_asks)
-                    else:
-                        action = 0
-                print(f'\nOpponent asked for {action} via fallback')
-                
-            success = self._process_ask(action, player="opponent")
-            self._update_sets()
-            self._check_empty_hand()
-
-            self.last_opponent_ask = action
-            self.last_opponent_ask_success = int(success)
-
-            if success:
-                done = self._check_game_over()
-                return self._get_observation(), 0, done, False, {}
-            else:
-                if self.deck:
-                    self.opponent_hand.append(self.deck.pop())
-
-                self.agent_turn = True
-                done = self._check_game_over()
-                return self._get_observation(), 0, done, False, {}
+            action, success, done = self.play_opponent_turn()
+            return self._get_observation(), 0, done, False, {"opponent_action": action, "opponent_success": success}
         
 
 
@@ -449,3 +410,27 @@ class GoFishEnv(gym.Env):
             ]
             if not self.recent_failed_asks[rank]:
                 del self.recent_failed_asks[rank]
+
+    def play_opponent_turn(self):
+        if hasattr(self, "model") and self.model is not None:
+            opponent_obs = self._get_opponent_observation()
+            flat_obs = flatten(self.observation_space, opponent_obs)
+            action, _ = self.model.predict(flat_obs, deterministic=True)
+        else:
+            valid_asks = [rank for rank in range(13) if rank in self.opponent_hand]
+            action = random.choice(valid_asks) if valid_asks else 0
+
+        success = self._process_ask(action, player="opponent")
+        self._update_sets()
+        self._check_empty_hand()
+
+        self.last_opponent_ask = action
+        self.last_opponent_ask_success = int(success)
+
+        if not success and self.deck:
+            self.opponent_hand.append(self.deck.pop())
+
+        if not success:
+            self.agent_turn = True
+
+        return action, success, self._check_game_over()
