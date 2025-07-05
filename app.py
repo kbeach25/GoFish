@@ -284,16 +284,19 @@ if "player_shown" not in st.session_state:
 # Pre-game landing screen
 if not st.session_state.started:
     # Main greeting text
-    st.markdown("<h1 style='text-align: center; '>Play Go Fish Online</h1>", unsafe_allow_html=True)
-    st.markdown("<h5 style='text-align: center; '>Kyle Beach</h5>", unsafe_allow_html=True)
-    st.markdown(
-    "<h3 style='text-align: center;'>Credit for card images: <a href='https://deckofcardsapi.com' target='_blank'>deckofcardsapi.com</a></h3>",
-    unsafe_allow_html=True
-    )
+    st.markdown("<h1 style='text-align: center; '>Go Fish!</h1>", unsafe_allow_html=True)
+    col1, col2, col3 = st.columns([1, 1, 1])
+    with col2:
+        st.image('fish_logo.png', use_container_width=True)
     st.markdown(
     "<h3 style='text-align: center;'>Rules: <a href='https://bicyclecards.com/how-to-play/go-fish' target='_blank'>bicyclecards.com</a></h3>",
     unsafe_allow_html=True
     )
+    st.markdown(
+    "<h5 style='text-align: center;'>Credit for card images: <a href='https://deckofcardsapi.com' target='_blank'>deckofcardsapi.com</a></h5>",
+    unsafe_allow_html=True
+    )
+    st.markdown("<h6 style='text-align: center; '>Kyle Beach</h6>", unsafe_allow_html=True)
     
     # Set up columns for formatting
     col1, col2, col3 = st.columns([1, 1, 1])
@@ -303,7 +306,7 @@ if not st.session_state.started:
         st.session_state.difficulty = st.selectbox("Select Difficulty:", options=["Easy", "Medium", "Hard"], index=["Easy", "Medium", "Hard"].index(st.session_state.difficulty))
 
         # Start game with start button
-        if st.button("Start"):
+        if st.button("Begin Game"):
             st.session_state.started = True
 
             # Load deck, environment, and model depending on difficulty
