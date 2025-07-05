@@ -316,19 +316,19 @@ if not st.session_state.started:
 
                 # Set model depending on difficulty
                 if st.session_state.difficulty == "Easy":
-                    st.session_state.model = PPO.load("GoFish_model_easy")
+                    st.session_state.model = PPO.load("GoFish_Model_easy")
                     st.session_state.env.reset()
                     st.session_state.coin_flip_result = st.session_state.env.coin_flip_result
                     st.session_state.env.set_model(st.session_state.model)
 
                 elif st.session_state.difficulty == "Medium":
-                    st.session_state.model = PPO.load("GoFish_model_medium")
+                    st.session_state.model = PPO.load("GoFish_Model_medium")
                     st.session_state.env.reset()
                     st.session_state.coin_flip_result = st.session_state.env.coin_flip_result
                     st.session_state.env.set_model(st.session_state.model)
 
                 elif st.session_state.difficulty == "Hard":
-                    st.session_state.model = PPO.load("GoFish_model_hard")
+                    st.session_state.model = PPO.load("GoFish_Model_hard")
                     st.session_state.env.reset()
                     st.session_state.coin_flip_result = st.session_state.env.coin_flip_result
                     st.session_state.env.set_model(st.session_state.model)
