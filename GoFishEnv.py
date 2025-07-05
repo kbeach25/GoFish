@@ -167,14 +167,26 @@ class GoFishEnv(gym.Env):
 
             # Opponent turn, asks for whatever card it has the most of or a random card
             while self.opponent_hand and not self._check_game_over():
-                
-                counts = [self.opponent_hand.count(r) for r in range(13)]
-                opponent_rank = int(np.argmax(counts))
 
-                # 30% chance of a random ask, trying to make opponent less predictable 
-                random_move = random.uniform(1, 100)
-                if random_move <= 30:
-                    opponent_rank = random.choice(counts)
+                # Opponent logic
+                counts = [self.opponent_hand.count(r) for r in range(13)]
+
+                # Ask for whatever card it has the most of if no asks yet
+                if self.last_opponent_ask == 13:
+                    opponent_rank = int(np.argmax(counts))
+
+                else:
+                    # Don't repeat asks unless necessary
+                    if any(rank != self.last_opponent_ask for rank in counts):
+                        non_repeats = [i for i in range(len(counts)) if i != self.last_opponent_ask]
+                        # Either ask for whatever you have the most of left or something random
+                        val = random.uniform(1,2)
+                        if val == 1:
+                            opponent_rank = int(np.argmax(non_repeats))
+                        else:
+                            opponent_rank = random.choice(non_repeats)
+                    else:
+                        opponent_rank = random.choice(counts)
                     
                 success = self._process_ask(opponent_rank, player="opponent")
                 self._update_sets()

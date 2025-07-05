@@ -284,7 +284,7 @@ if "player_shown" not in st.session_state:
 # Pre-game landing screen
 if not st.session_state.started:
     # Main greeting text
-    st.markdown("<h1 style='text-align: center; '>Go Fish</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align: center; '>Play Go Fish Online</h1>", unsafe_allow_html=True)
     st.markdown("<h5 style='text-align: center; '>Kyle Beach</h5>", unsafe_allow_html=True)
     st.markdown(
     "<h3 style='text-align: center;'>Credit for card images: <a href='https://deckofcardsapi.com' target='_blank'>deckofcardsapi.com</a></h3>",
@@ -313,19 +313,19 @@ if not st.session_state.started:
 
                 # Set model depending on difficulty
                 if st.session_state.difficulty == "Easy":
-                    st.session_state.model = PPO.load("GoFish_model") # Change this line for other models
+                    st.session_state.model = PPO.load("GoFish_model_easy")
                     st.session_state.env.reset()
                     st.session_state.coin_flip_result = st.session_state.env.coin_flip_result
                     st.session_state.env.set_model(st.session_state.model)
 
                 elif st.session_state.difficulty == "Medium":
-                    st.session_state.model = PPO.load("GoFish_model") # Change this line for other models
+                    st.session_state.model = PPO.load("GoFish_model_medium")
                     st.session_state.env.reset()
                     st.session_state.coin_flip_result = st.session_state.env.coin_flip_result
                     st.session_state.env.set_model(st.session_state.model)
 
                 elif st.session_state.difficulty == "Hard":
-                    st.session_state.model = PPO.load("GoFish_model") # Change this line for other models
+                    st.session_state.model = PPO.load("GoFish_model_hard")
                     st.session_state.env.reset()
                     st.session_state.coin_flip_result = st.session_state.env.coin_flip_result
                     st.session_state.env.set_model(st.session_state.model)
